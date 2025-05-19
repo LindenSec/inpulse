@@ -21,6 +21,22 @@ const categoryIcons = {
   "Patches": <CheckCircle size={18} />
 };
 
+// Helper function to ensure values are safe for rendering
+const ensureString = (value) => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    if (value['#text']) return String(value['#text']);
+    if (value.text) return String(value.text);
+    try {
+      return String(value);
+    } catch (e) {
+      return '';
+    }
+  }
+  return String(value);
+};
+
 function App() {
   const [news, setNews] = useState([]);
   const [filteredNews, setFilteredNews] = useState([]);
@@ -39,23 +55,31 @@ function App() {
   const [showSourcesPage, setShowSourcesPage] = useState(false);
   
   // Extract all available tags from news items
-  const allTags = [...new Set(news.flatMap(item => item.tags))].sort();
+  const allTags = [...new Set(news.flatMap(item => 
+    (item.tags || []).map(tag => ensureString(tag))
+  ))].sort();
   
   // Extract all available sources from news items
-  const allSources = [...new Set(news.map(item => item.source))].sort();
+  const allSources = [...new Set(news.map(item => 
+    ensureString(item.source)
+  ))].sort();
   
   // All available categories
   const allCategories = Object.keys(categoryIcons);
   
   // Format date to readable format
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return dateString || '';
+    }
   };
   
   // Toggle favorite status
@@ -79,7 +103,15 @@ function App() {
     try {
       setError(null);
       const newsData = await fetchAllNews();
-      setNews(newsData);
+      
+      // Make sure tags and categories are always arrays
+      const sanitizedData = newsData.map(item => ({
+        ...item,
+        categories: Array.isArray(item.categories) ? item.categories : [],
+        tags: Array.isArray(item.tags) ? item.tags : []
+      }));
+      
+      setNews(sanitizedData);
       setLastUpdated(new Date());
     } catch (err) {
       console.error('Error fetching news:', err);
@@ -122,24 +154,24 @@ function App() {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(item => 
-        item.title.toLowerCase().includes(term) || 
-        item.summary.toLowerCase().includes(term) ||
-        item.source.toLowerCase().includes(term) ||
-        item.tags.some(tag => tag.toLowerCase().includes(term))
+        String(item.title).toLowerCase().includes(term) || 
+        String(item.summary).toLowerCase().includes(term) ||
+        String(item.source).toLowerCase().includes(term) ||
+        (item.tags || []).some(tag => String(tag).toLowerCase().includes(term))
       );
     }
     
     // Filter by selected categories
     if (selectedCategories.length > 0) {
       filtered = filtered.filter(item => 
-        selectedCategories.some(cat => item.categories.includes(cat))
+        selectedCategories.some(cat => (item.categories || []).includes(cat))
       );
     }
     
     // Filter by selected tags
     if (selectedTags.length > 0) {
       filtered = filtered.filter(item => 
-        selectedTags.some(tag => item.tags.includes(tag))
+        selectedTags.some(tag => (item.tags || []).includes(tag))
       );
     }
     
@@ -232,7 +264,7 @@ function App() {
   // Count items per source
   const getSourceCount = (source) => {
     if (!news || news.length === 0) return 0;
-    return news.filter(item => item.source === source).length;
+    return news.filter(item => String(item.source) === source).length;
   };
 
   // Toggle mobile menu
@@ -391,6 +423,8 @@ function App() {
                 </ul>
               </div>
               
+              <div className="section-separator"></div>
+              
               {(showFilters || menuOpen) && (
                 <div className="tags-container">
                   <div className="tags-header">
@@ -468,7 +502,7 @@ function App() {
                     <div key={item.id} className="news-card">
                       <div className="news-card-content">
                         <div className="news-card-header">
-                          <span className="news-source">{item.source} • {formatDate(item.pubDate)}</span>
+                          <span className="news-source">{ensureString(item.source)} • {formatDate(item.pubDate)}</span>
                           <button 
                             className={`favorite-button ${favorites.includes(item.id) ? 'favorited' : ''}`}
                             onClick={() => toggleFavorite(item.id)}
@@ -480,16 +514,16 @@ function App() {
                             />
                           </button>
                         </div>
-                        <h3 className="news-title">{item.title}</h3>
-                        <p className="news-summary">{item.summary}</p>
+                        <h3 className="news-title">{ensureString(item.title)}</h3>
+                        <p className="news-summary">{ensureString(item.summary)}</p>
                         <div className="news-footer">
                           <div className="news-tags">
-                            {item.tags.map(tag => (
+                            {(item.tags || []).map(tag => (
                               <span 
-                                key={tag} 
+                                key={typeof tag === 'object' ? JSON.stringify(tag) : tag} 
                                 className="news-tag"
                               >
-                                {tag}
+                                {ensureString(tag)}
                               </span>
                             ))}
                           </div>

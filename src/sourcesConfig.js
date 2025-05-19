@@ -1,4 +1,4 @@
-export const NEWS_SOURCES = [
+const NEWS_SOURCES = [
   {
     name: 'The Hacker News',
     url: 'https://thehackernews.com/',
@@ -14,14 +14,6 @@ export const NEWS_SOURCES = [
     defaultCategory: 'Incidents',
     description: 'In-depth security news and investigation by Brian Krebs, focusing on cybercrime, data breaches, and security awareness.',
     category: 'Incidents'
-  },
-  {
-    name: 'Threatpost',
-    url: 'https://threatpost.com/',
-    feedUrl: 'https://threatpost.com/feed/',
-    defaultCategory: 'Threats',
-    description: 'Comprehensive security news site covering various security topics including malware, vulnerabilities, and policy.',
-    category: 'Threats'
   },
   {
     name: 'Dark Reading',
@@ -186,7 +178,7 @@ export const NEWS_SOURCES = [
 {
   name: 'Cisco Talos Intelligence',
   url: 'https://blog.talosintelligence.com/',
-  feedUrl: 'https://blog.talosintelligence.com/feeds/posts/default',
+  feedUrl: 'https://blog.talosintelligence.com/feed/',
   defaultCategory: 'Threats',
   description: 'Threat intelligence blog from Cisco\'s security research team.',
   category: 'Threats'
@@ -194,9 +186,11 @@ export const NEWS_SOURCES = [
 {
   name: 'FireEye Threat Research',
   url: 'https://www.fireeye.com/blog/threat-research.html',
-  feedUrl: 'https://www.fireeye.com/blog/threat-research/_jcr_content.feed',
+  feedUrl: 'https://www.trellix.com/rss/research.xml',
   defaultCategory: 'Threats',
   description: 'Advanced threat research and analysis from FireEye.',
   category: 'Threats'
 }
 ];
+
+module.exports = { NEWS_SOURCES };

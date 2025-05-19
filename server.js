@@ -1,4 +1,3 @@
-
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
@@ -15,12 +14,17 @@ app.use(cors());
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, 'build')));
 
-// List of cybersecurity news sources with their RSS feeds
-// In server.js
-const { NEWS_SOURCES } = require('./src/sourcesConfig');
-
-// Replace your existing NEWS_SOURCES array with this import
-// The rest of the server.js stays the same
+// Import the NEWS_SOURCES array - using CommonJS require
+// Make sure your sourcesConfig.js is in CommonJS format (module.exports = ...)
+let NEWS_SOURCES = [];
+try {
+  const sourcesConfig = require('./src/sourcesConfig');
+  NEWS_SOURCES = sourcesConfig.NEWS_SOURCES || [];
+  console.log(`Loaded ${NEWS_SOURCES.length} news sources from config`);
+} catch (error) {
+  console.error('Error loading news sources:', error.message);
+  NEWS_SOURCES = [];
+}
 
 // Define a list of category keywords to categorize news
 const CATEGORY_KEYWORDS = {
@@ -69,9 +73,98 @@ const COMMON_TAGS = [
   'Compliance', 'GDPR', 'PCI', 'HIPAA', 'SOC', 'ISO27001', 'NIST'
 ];
 
+// Demo data that will be returned if real feeds fail
+const demoData = [
+  {
+    id: uuidv4(),
+    source: 'InPulse Demo',
+    title: 'Welcome to InPulse Cybersecurity News Aggregator',
+    summary: 'This is demo data shown because no live feeds could be fetched at the moment. In a production environment, this would be replaced with real cybersecurity news from various sources.',
+    url: 'https://github.com/yourusername/inpulse',
+    pubDate: new Date().toISOString(),
+    categories: ['Advisories'],
+    tags: ['Demo', 'InPulse']
+  },
+  {
+    id: uuidv4(),
+    source: 'Cybersecurity Demo',
+    title: 'Sample Microsoft Vulnerability Advisory',
+    summary: 'This is a sample vulnerability announcement to demonstrate how the InPulse aggregator categorizes and displays security information for Microsoft products.',
+    url: 'https://github.com/yourusername/inpulse',
+    pubDate: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+    categories: ['Vulnerabilities', 'Microsoft', 'Advisories'],
+    tags: ['CVE', 'Windows', 'Patch', 'Microsoft']
+  },
+  {
+    id: uuidv4(),
+    source: 'Security Alert Demo',
+    title: 'Sample Ransomware Threat Alert',
+    summary: 'This is a sample ransomware threat alert to demonstrate how the InPulse aggregator categorizes and displays malware threat information.',
+    url: 'https://github.com/yourusername/inpulse',
+    pubDate: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
+    categories: ['Threats', 'Malware'],
+    tags: ['Ransomware', 'Phishing', 'Email']
+  },
+  {
+    id: uuidv4(),
+    source: 'CVE Database Demo',
+    title: 'Sample CVE-2023-1234 Disclosure',
+    summary: 'This is a sample CVE disclosure to demonstrate how the InPulse aggregator handles and categorizes CVE entries and specific vulnerability information.',
+    url: 'https://github.com/yourusername/inpulse',
+    pubDate: new Date(Date.now() - 10800000).toISOString(), // 3 hours ago
+    categories: ['Vulnerabilities', 'CVE'],
+    tags: ['CVE-2023-1234', 'Buffer Overflow', 'Remote Code Execution']
+  },
+  {
+    id: uuidv4(),
+    source: 'Patch Tuesday Demo',
+    title: 'Sample Security Update Release',
+    summary: 'This is a sample security update announcement to demonstrate how the InPulse aggregator categorizes and displays patch information.',
+    url: 'https://github.com/yourusername/inpulse',
+    pubDate: new Date(Date.now() - 14400000).toISOString(), // 4 hours ago
+    categories: ['Patches', 'Microsoft', 'Advisories'],
+    tags: ['Update', 'Patch Tuesday', 'Windows', 'Microsoft']
+  }
+];
+
+// Helper function to ensure value is a string
+function ensureString(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    // Handle specific object types that might contain text
+    if (value["#text"]) return String(value["#text"]);
+    if (value["@_text"]) return String(value["@_text"]);
+    if (value.value) return String(value.value);
+    try {
+      return String(value);
+    } catch (e) {
+      return '';
+    }
+  }
+  return String(value);
+}
+
 // Function to clean HTML from text
 function cleanHtml(html) {
   if (!html) return '';
+  
+  // Check if html is an object and not a string (common in Atom feeds)
+  if (typeof html !== 'string') {
+    // If it's an object with a specific structure like content."#text" or content.value
+    if (html._text) return cleanHtml(html._text);
+    if (html.__text) return cleanHtml(html.__text);
+    if (html["#text"]) return cleanHtml(html["#text"]);
+    if (html.value) return cleanHtml(html.value);
+    
+    // If we can't find text content, try to convert object to string
+    try {
+      return cleanHtml(JSON.stringify(html));
+    } catch (e) {
+      console.log("Could not parse HTML content:", typeof html);
+      return '';
+    }
+  }
   
   // Remove HTML tags using regex
   let text = html.replace(/<[^>]*>?/gm, '');
@@ -100,10 +193,11 @@ function categorizeNewsItem(item, defaultCategory) {
   const tags = new Set();
   
   // Add default category
-  categories.add(defaultCategory);
+  const categoryToUse = ensureString(defaultCategory || 'Uncategorized');
+  categories.add(categoryToUse);
   
   // Combine title and summary for analysis
-  const content = `${item.title} ${item.summary}`.toLowerCase();
+  const content = `${ensureString(item.title || '')} ${ensureString(item.summary || '')}`.toLowerCase();
   
   // Check for category keywords
   for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
@@ -130,28 +224,53 @@ function categorizeNewsItem(item, defaultCategory) {
   if (cveMatches) {
     categories.add('CVE');
     // Add up to 3 specific CVEs as tags
-    cveMatches.slice(0, 3).forEach(cve => tags.add(cve.toUpperCase()));
+    cveMatches.slice(0, 3).forEach(cve => tags.add(ensureString(cve.toUpperCase())));
   }
   
   // Add default tags if none found
   if (tags.size === 0) {
-    tags.add(defaultCategory);
+    // Add the category as a tag
+    Array.from(categories).forEach(category => tags.add(ensureString(category)));
+    
+    // If still no tags, add a generic source tag
+    if (tags.size === 0 && item.source) {
+      tags.add(ensureString(item.source));
+    }
+    
+    // Final fallback
+    if (tags.size === 0) {
+      tags.add('Cybersecurity');
+    }
   }
   
+  // Ensure all categories and tags are strings
+  const stringCategories = Array.from(categories).map(cat => ensureString(cat));
+  const stringTags = Array.from(tags).map(tag => ensureString(tag));
+  
   return {
-    categories: Array.from(categories),
-    tags: Array.from(tags)
+    categories: stringCategories,
+    tags: stringTags
   };
 }
 
-// Parse RSS feed and extract items - simplified version
+// Parse RSS feed and extract items - improved version
 function parseRss(xmlContent, sourceName, defaultCategory) {
   try {
+    // Early check for non-XML content
+    if (typeof xmlContent !== 'string' || 
+        (!xmlContent.includes('<rss') && !xmlContent.includes('<feed') && !xmlContent.includes('<?xml'))) {
+      console.log(`Content from ${sourceName} does not appear to be valid XML/RSS/Atom`);
+      return [];
+    }
+    
     // Create parser with options
     const parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: "@_",
-      // additional options if needed
+      // additional options for better parsing
+      parseAttributeValue: true,
+      trimValues: true,
+      parseTrueNumberOnly: false
     });
     
     // Parse the XML
@@ -159,6 +278,12 @@ function parseRss(xmlContent, sourceName, defaultCategory) {
     
     // Debug the structure
     console.log(`Data from ${sourceName} parsed. Top-level keys:`, Object.keys(result));
+    
+    // Handle case when result is HTML instead of proper RSS/XML
+    if (result.html || (Object.keys(result).length === 1 && result.html)) {
+      console.log(`Feed from ${sourceName} appears to be HTML instead of RSS/Atom, skipping.`);
+      return [];
+    }
     
     // Handle different RSS formats
     let items = [];
@@ -182,10 +307,10 @@ function parseRss(xmlContent, sourceName, defaultCategory) {
       
       // Map RSS items to our format
       items = rssItems.map(item => {
-        const title = item.title || 'No Title';
-        const link = item.link || '';
+        const title = ensureString(item.title || 'No Title');
+        const link = ensureString(item.link || '');
         const description = item.description || '';
-        const pubDate = item.pubDate || new Date().toISOString();
+        const pubDate = ensureString(item.pubDate || new Date().toISOString());
         
         // Clean description
         const summary = cleanHtml(description);
@@ -210,7 +335,7 @@ function parseRss(xmlContent, sourceName, defaultCategory) {
       
       // Map Atom entries to our format
       items = entries.map(entry => {
-        const title = entry.title || 'No Title';
+        const title = ensureString(entry.title || 'No Title');
         let link = '';
         
         if (entry.link) {
@@ -218,14 +343,23 @@ function parseRss(xmlContent, sourceName, defaultCategory) {
           if (typeof entry.link === 'string') {
             link = entry.link;
           } else if (Array.isArray(entry.link)) {
-            link = entry.link[0]?.href || '';
+            // Find the first link with rel="alternate" or just take the first one
+            const alternateLink = entry.link.find(l => l['@_rel'] === 'alternate');
+            link = alternateLink ? ensureString(alternateLink['@_href']) : ensureString(entry.link[0]['@_href'] || '');
           } else {
-            link = entry.link.href || '';
+            link = ensureString(entry.link['@_href'] || '');
           }
         }
         
-        const content = entry.content || entry.summary || '';
-        const pubDate = entry.published || entry.updated || new Date().toISOString();
+        // Handle content which might be in various places
+        let content = '';
+        if (entry.content) {
+          content = entry.content;
+        } else if (entry.summary) {
+          content = entry.summary;
+        }
+        
+        const pubDate = ensureString(entry.published || entry.updated || new Date().toISOString());
         
         // Clean content
         const summary = cleanHtml(content);
@@ -240,15 +374,17 @@ function parseRss(xmlContent, sourceName, defaultCategory) {
     
     // Process each item to add categories and tags
     return items.map(item => {
-      const { categories, tags } = categorizeNewsItem(item, defaultCategory);
+      // Use the source's category, or a fallback if it's not defined
+      const sourceCategory = ensureString(defaultCategory || 'Uncategorized');
+      const { categories, tags } = categorizeNewsItem(item, sourceCategory);
       
       return {
         id: uuidv4(),
-        source: sourceName,
-        title: item.title,
-        summary: item.summary,
-        url: item.url,
-        pubDate: new Date(item.pubDate).toISOString(),
+        source: ensureString(sourceName),
+        title: ensureString(item.title),
+        summary: ensureString(item.summary),
+        url: ensureString(item.url),
+        pubDate: ensureString(new Date(item.pubDate).toISOString()),
         categories,
         tags
       };
@@ -257,6 +393,24 @@ function parseRss(xmlContent, sourceName, defaultCategory) {
     console.error(`Error parsing RSS feed from ${sourceName}:`, error);
     return [];
   }
+}
+
+// Function to sanitize items for React
+function sanitizeItems(items) {
+  return items.map(item => ({
+    id: ensureString(item.id),
+    source: ensureString(item.source || ''),
+    title: ensureString(item.title || ''),
+    summary: ensureString(item.summary || ''),
+    url: ensureString(item.url || ''),
+    pubDate: ensureString(item.pubDate || new Date().toISOString()),
+    categories: Array.isArray(item.categories) 
+      ? item.categories.map(cat => ensureString(cat || '')) 
+      : [],
+    tags: Array.isArray(item.tags) 
+      ? item.tags.map(tag => ensureString(tag || '')) 
+      : []
+  }));
 }
 
 // Simple test route
@@ -268,75 +422,40 @@ app.get('/api/test', (req, res) => {
 app.get('/api/news', async (req, res) => {
   try {
     console.log('Fetching news from all sources...');
-    
-    // Demo data that will be returned if real feeds fail
-    const demoData = [
-      {
-        id: uuidv4(),
-        source: 'InPulse Demo',
-        title: 'Welcome to InPulse Cybersecurity News Aggregator',
-        summary: 'This is demo data shown because no live feeds could be fetched at the moment. In a production environment, this would be replaced with real cybersecurity news from various sources.',
-        url: 'https://github.com/yourusername/inpulse',
-        pubDate: new Date().toISOString(),
-        categories: ['Advisories'],
-        tags: ['Demo', 'InPulse']
-      },
-      {
-        id: uuidv4(),
-        source: 'Cybersecurity Demo',
-        title: 'Sample Microsoft Vulnerability Advisory',
-        summary: 'This is a sample vulnerability announcement to demonstrate how the InPulse aggregator categorizes and displays security information for Microsoft products.',
-        url: 'https://github.com/yourusername/inpulse',
-        pubDate: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
-        categories: ['Vulnerabilities', 'Microsoft', 'Advisories'],
-        tags: ['CVE', 'Windows', 'Patch', 'Microsoft']
-      },
-      {
-        id: uuidv4(),
-        source: 'Security Alert Demo',
-        title: 'Sample Ransomware Threat Alert',
-        summary: 'This is a sample ransomware threat alert to demonstrate how the InPulse aggregator categorizes and displays malware threat information.',
-        url: 'https://github.com/yourusername/inpulse',
-        pubDate: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
-        categories: ['Threats', 'Malware'],
-        tags: ['Ransomware', 'Phishing', 'Email']
-      },
-      {
-        id: uuidv4(),
-        source: 'CVE Database Demo',
-        title: 'Sample CVE-2023-1234 Disclosure',
-        summary: 'This is a sample CVE disclosure to demonstrate how the InPulse aggregator handles and categorizes CVE entries and specific vulnerability information.',
-        url: 'https://github.com/yourusername/inpulse',
-        pubDate: new Date(Date.now() - 10800000).toISOString(), // 3 hours ago
-        categories: ['Vulnerabilities', 'CVE'],
-        tags: ['CVE-2023-1234', 'Buffer Overflow', 'Remote Code Execution']
-      },
-      {
-        id: uuidv4(),
-        source: 'Patch Tuesday Demo',
-        title: 'Sample Security Update Release',
-        summary: 'This is a sample security update announcement to demonstrate how the InPulse aggregator categorizes and displays patch information.',
-        url: 'https://github.com/yourusername/inpulse',
-        pubDate: new Date(Date.now() - 14400000).toISOString(), // 4 hours ago
-        categories: ['Patches', 'Microsoft', 'Advisories'],
-        tags: ['Update', 'Patch Tuesday', 'Windows', 'Microsoft']
-      }
-    ];
+    console.log('NEWS_SOURCES:', NEWS_SOURCES ? 'defined' : 'undefined', 
+                'length:', NEWS_SOURCES ? NEWS_SOURCES.length : 0);
     
     // Try to fetch from real sources
     const newsItems = [];
     
-    const fetchPromises = NEWS_SOURCES.map(async (source) => {
+    // Handle the case where NEWS_SOURCES might be undefined
+    const fetchPromises = (NEWS_SOURCES || []).map(async (source) => {
       try {
         console.log(`Fetching from ${source.name}...`);
+        
+        // Add a check for missing feed URL
+        if (!source.feedUrl) {
+          console.error(`Missing feedUrl for ${source.name}`);
+          return [];
+        }
+        
         const response = await axios.get(source.feedUrl, {
-          timeout: 10000, // 10 second timeout
+          timeout: 15000, // 15 second timeout
           headers: {
             'User-Agent': 'InPulse Cybersecurity News Aggregator/1.0'
           }
         });
         
-        const items = parseRss(response.data, source.name, source.defaultCategory);
+        // Check if we got actual XML/RSS data
+        const contentType = response.headers['content-type'] || '';
+        if (!contentType.includes('xml') && !contentType.includes('rss') && 
+            !response.data.includes('<rss') && !response.data.includes('<feed') &&
+            !response.data.includes('<?xml')) {
+          console.error(`Response from ${source.name} doesn't appear to be RSS/XML`);
+          return [];
+        }
+        
+        const items = parseRss(response.data, source.name, source.defaultCategory || source.category);
         console.log(`Successfully fetched ${items.length} items from ${source.name}`);
         return items;
       } catch (error) {
@@ -360,18 +479,23 @@ app.get('/api/news', async (req, res) => {
     
     console.log(`Total news items fetched: ${newsItems.length}`);
     
+    // Sanitize the news items to ensure all properties are safe for React
+    const sanitizedItems = sanitizeItems(newsItems);
+    
     // If no items could be fetched, return demo data
-    if (newsItems.length === 0) {
+    if (sanitizedItems.length === 0) {
       console.log('No real news items found, returning demo data');
-      return res.json(demoData);
+      return res.json(sanitizeItems(demoData));
     }
     
     // Return the aggregated news items
-    res.json(newsItems);
+    res.json(sanitizedItems);
   } catch (error) {
     console.error('Error in /api/news endpoint:', error);
-    // Return demo data in case of error
-    res.json(demoData);
+    console.log('demoData:', demoData ? 'defined' : 'undefined');
+    
+    // Safely return demo data or empty array
+    res.json(sanitizeItems(demoData || []));
   }
 });
 
