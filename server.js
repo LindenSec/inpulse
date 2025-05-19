@@ -1,4 +1,4 @@
-// server-simple.js
+
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
@@ -16,63 +16,11 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, 'build')));
 
 // List of cybersecurity news sources with their RSS feeds
-const NEWS_SOURCES = [
-  {
-    name: 'The Hacker News',
-    url: 'https://feeds.feedburner.com/TheHackersNews',
-    defaultCategory: 'Threats'
-  },
-  {
-    name: 'Krebs on Security',
-    url: 'https://krebsonsecurity.com/feed/',
-    defaultCategory: 'Incidents'
-  },
-  {
-    name: 'Threatpost',
-    url: 'https://threatpost.com/feed/',
-    defaultCategory: 'Threats'
-  },
-  {
-    name: 'Dark Reading',
-    url: 'https://www.darkreading.com/rss.xml',
-    defaultCategory: 'Threats'
-  },
-  {
-    name: 'BleepingComputer',
-    url: 'https://www.bleepingcomputer.com/feed/',
-    defaultCategory: 'Vulnerabilities'
-  },
-  {
-    name: 'SecurityWeek',
-    url: 'https://feeds.feedburner.com/securityweek',
-    defaultCategory: 'Vulnerabilities'
-  },
-  {
-    name: 'US-CERT Alerts',
-    url: 'https://us-cert.cisa.gov/ncas/alerts.xml',
-    defaultCategory: 'Advisories'
-  },
-  {
-    name: 'CISA Bulletins',
-    url: 'https://www.cisa.gov/uscert/ncas/bulletins.xml',
-    defaultCategory: 'Advisories'
-  },
-  {
-    name: 'NCSC UK',
-    url: 'https://www.ncsc.gov.uk/api/1/services/v1/report-rss-feed.xml',
-    defaultCategory: 'Advisories'
-  },
+// In server.js
+const { NEWS_SOURCES } = require('./src/sourcesConfig');
 
-  { name: 'NCSC NL News',
-    url: 'https://feeds.ncsc.nl/nieuws.rss',
-    defaultCategory: 'Advisories'
-  },
-
-  { name: 'NCSC NL Advisories',
-    url: 'https://advisories.ncsc.nl/rss/advisories',
-    defaultCategory: 'Advisories'
-  }
-];
+// Replace your existing NEWS_SOURCES array with this import
+// The rest of the server.js stays the same
 
 // Define a list of category keywords to categorize news
 const CATEGORY_KEYWORDS = {
@@ -381,7 +329,7 @@ app.get('/api/news', async (req, res) => {
     const fetchPromises = NEWS_SOURCES.map(async (source) => {
       try {
         console.log(`Fetching from ${source.name}...`);
-        const response = await axios.get(source.url, {
+        const response = await axios.get(source.feedUrl, {
           timeout: 10000, // 10 second timeout
           headers: {
             'User-Agent': 'InPulse Cybersecurity News Aggregator/1.0'
