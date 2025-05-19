@@ -429,6 +429,12 @@ app.get('/api/news', async (req, res) => {
 
 // The "catchall" handler: for any request that doesn't match one above, send back React's index.html file.
 app.get('*', (req, res) => {
+  // Only for API routes, handle normally
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'API endpoint not found' });
+  }
+  
+  // For all other routes, serve the React app
   res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 

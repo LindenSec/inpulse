@@ -2,7 +2,7 @@
   "name": "inpulse",
   "version": "0.1.0",
   "description": "Cybersecurity News Aggregator",
-  "homepage": "https://lindensec.github.io/inpulse",
+  "homepage": "https://inpulse.onrender.com/",
   "main": "server.js",
   "scripts": {
     "start": "react-scripts start",
