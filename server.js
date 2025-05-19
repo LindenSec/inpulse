@@ -310,7 +310,9 @@ function parseRss(xmlContent, sourceName, defaultCategory) {
         const title = ensureString(item.title || 'No Title');
         const link = ensureString(item.link || '');
         const description = item.description || '';
-        const pubDate = ensureString(item.pubDate || new Date().toISOString());
+        const pubDateValue = item.pubDate || new Date().toISOString();
+        const parsedDate = parseDate(pubDateValue);
+        const pubDate = parsedDate.toISOString();
         
         // Clean description
         const summary = cleanHtml(description);
@@ -384,7 +386,7 @@ function parseRss(xmlContent, sourceName, defaultCategory) {
         title: ensureString(item.title),
         summary: ensureString(item.summary),
         url: ensureString(item.url),
-        pubDate: ensureString(new Date(item.pubDate).toISOString()),
+        pubDate: parseDate(item.pubDate).toISOString(),
         categories,
         tags
       };
@@ -411,6 +413,79 @@ function sanitizeItems(items) {
       ? item.tags.map(tag => ensureString(tag || '')) 
       : []
   }));
+}
+
+// Add this function to your server.js
+function parseDate(dateString) {
+  if (!dateString) return new Date();
+  
+  try {
+    // First try standard date parsing
+    const date = new Date(dateString);
+    
+    // Check if valid date was created
+    if (!isNaN(date.getTime())) {
+      return date;
+    }
+    
+    // If standard parsing fails, try various RSS date formats
+    // RFC 822/1123 format used in many RSS feeds
+    const rfc822Pattern = /^\w+, (\d{1,2}) (\w{3}) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$/;
+    const rfc822Match = dateString.match(rfc822Pattern);
+    if (rfc822Match) {
+      return new Date(dateString);
+    }
+    
+    // Try another common format
+    const altPattern = /^\w+, (\d{1,2}) (\w{3}) (\d{4}) (\d{2}):(\d{2}):(\d{2}) [+-]\d{4}$/;
+    const altMatch = dateString.match(altPattern);
+    if (altMatch) {
+      return new Date(dateString);
+    }
+    
+    // Last resort - try extracting parts and creating date
+    // This handles a variety of formats
+    const dateRegex = /(\d{1,4})[-.\/](\d{1,2})[-.\/](\d{1,4})/;
+    const dateMatch = dateString.match(dateRegex);
+    if (dateMatch) {
+      const timeRegex = /(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/;
+      const timeMatch = dateString.match(timeRegex);
+      
+      let year, month, day, hours = 0, minutes = 0, seconds = 0;
+      
+      // Determine which part is the year
+      if (dateMatch[1].length === 4) {
+        year = parseInt(dateMatch[1]);
+        month = parseInt(dateMatch[2]) - 1;
+        day = parseInt(dateMatch[3]);
+      } else if (dateMatch[3].length === 4) {
+        year = parseInt(dateMatch[3]);
+        month = parseInt(dateMatch[2]) - 1;
+        day = parseInt(dateMatch[1]);
+      } else {
+        // Default to current year if year not clearly identified
+        year = new Date().getFullYear();
+        month = parseInt(dateMatch[1]) - 1;
+        day = parseInt(dateMatch[2]);
+      }
+      
+      if (timeMatch) {
+        hours = parseInt(timeMatch[1]);
+        minutes = parseInt(timeMatch[2]);
+        seconds = timeMatch[3] ? parseInt(timeMatch[3]) : 0;
+      }
+      
+      return new Date(year, month, day, hours, minutes, seconds);
+    }
+    
+    // If all parsing fails, log the issue and use current date
+    console.log(`Could not parse date string: ${dateString}`);
+    return new Date();
+    
+  } catch (error) {
+    console.error(`Error parsing date: ${dateString}`, error);
+    return new Date(); // Fallback to current date
+  }
 }
 
 // Simple test route
@@ -475,7 +550,29 @@ app.get('/api/news', async (req, res) => {
     });
     
     // Sort by date (newest first)
-    newsItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+    // In your /api/news endpoint, modify the sorting:
+// Sort by date (newest first)
+newsItems.sort((a, b) => {
+  try {
+    const dateA = new Date(a.pubDate);
+    const dateB = new Date(b.pubDate);
+    
+    // Check if both dates are valid
+    if (!isNaN(dateA.getTime()) && !isNaN(dateB.getTime())) {
+      return dateB - dateA;
+    }
+    
+    // If one date is invalid, prioritize the valid one
+    if (!isNaN(dateA.getTime())) return -1;
+    if (!isNaN(dateB.getTime())) return 1;
+    
+    // If both are invalid, sort by title
+    return a.title.localeCompare(b.title);
+  } catch (e) {
+    console.error("Error sorting dates:", e);
+    return 0;
+  }
+});
     
     console.log(`Total news items fetched: ${newsItems.length}`);
     

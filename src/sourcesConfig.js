@@ -16,14 +16,6 @@ const NEWS_SOURCES = [
     category: 'Incidents'
   },
   {
-    name: 'Dark Reading',
-    url: 'https://www.darkreading.com/',
-    feedUrl: 'https://www.darkreading.com/rss.xml',
-    defaultCategory: 'Threats',
-    description: 'Cybersecurity news and analysis focusing on attacks, vulnerabilities, and cyber threats facing enterprises.',
-    category: 'Threats'
-  },
-  {
     name: 'BleepingComputer',
     url: 'https://www.bleepingcomputer.com/',
     feedUrl: 'https://www.bleepingcomputer.com/feed/',
